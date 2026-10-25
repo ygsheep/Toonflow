@@ -290,8 +290,131 @@ function getCanvasContext() {
   return canvasId.value || canvasMenuRef.value?.initialized ? createCanvasContext(canvasId.value, canvasController.signal, workspaceController.signal) : undefined;
 }
 const canvasReady = computed(() => !!canvasId.value && !nodeListLoading.value && nodeLoads.size === 0);
+
+// ACT: 从分镜数据自动生成画布：参考图 → 视频生成节点，提示词直接写入视频生成节点的提示词框，并附已生成视频节点。
+type StoryboardReferencePayload = { name: string; path: string | null };
+type StoryboardSourcePayload = { title: string; text: string; references?: StoryboardReferencePayload[]; video?: { path: string } | null };
+type StoryboardPayload = { segments?: { id: string; video?: { path: string } | null; references?: StoryboardReferencePayload[]; prompts?: StoryboardSourcePayload[] }[] };
+const storyboardBuilding = ref(false);
+const storyboardBuiltCanvases = new Set<string>();
+
+function mediaMime(file: string) {
+  const extension = file.split(".").pop()?.toLowerCase() ?? "";
+  if (extension === "png") return "image/png";
+  if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
+  if (extension === "webp") return "image/webp";
+  if (extension === "gif") return "image/gif";
+  if (extension === "mov") return "video/quicktime";
+  if (extension === "webm") return "video/webm";
+  if (extension === "mkv") return "video/x-matroska";
+  return "video/mp4";
+}
+
+function buildStoryboardGraph(payload: StoryboardPayload, offsetX: number) {
+  const nodes: Node[] = [];
+  const edges: Edge[] = [];
+  let cursorX = offsetX;
+  for (const segment of payload.segments ?? []) {
+    const sources = segment.prompts?.length ? segment.prompts : [{ title: segment.id, text: "", references: segment.references, video: segment.video }];
+    const references = segment.references ?? sources[0]?.references ?? [];
+    const imageIds = new Map<string, string>();
+    references.forEach((reference, index) => {
+      if (!reference.path) return;
+      const id = crypto.randomUUID();
+      imageIds.set(reference.path, id);
+      nodes.push({
+        id, type: "remote-imageNode",
+        position: { x: cursorX, y: 60 + index * 320 },
+        data: { label: reference.name, outputs: { image: { dataType: "IMAGE", value: { url: reference.path, mimeType: mediaMime(reference.path) } } } },
+      });
+    });
+    sources.forEach((source, index) => {
+      const groupX = cursorX + 360 + index * 860;
+      const groupId = `storyboard-${segment.id}-${index}-${crypto.randomUUID()}`;
+      const generationId = crypto.randomUUID();
+      const videoId = crypto.randomUUID();
+      nodes.push({
+        id: groupId, type: "canvasGroup", connectable: false,
+        position: { x: groupX, y: 0 },
+        data: { label: `${segment.id} · ${source.title}` },
+        style: { width: "820px", height: "1000px" },
+        expandParent: false,
+      });
+      // ACT: 提示词不再单独建文本节点，直接写进视频生成节点的提示词框（prompt + promptModel 富文本行）。
+      nodes.push({
+        id: generationId, type: "remote-videoGenerationNode", parentNode: groupId, expandParent: false,
+        position: { x: 40, y: 60 },
+        data: {
+          label: "视频生成",
+          prompt: source.text,
+          promptModel: source.text.split(/\r?\n/).map(text => [{ type: "Write", text }]),
+        },
+      });
+      if (source.video?.path) {
+        nodes.push({
+          id: videoId, type: "remote-videoNode", parentNode: groupId, expandParent: false,
+          position: { x: 40, y: 640 },
+          data: { label: source.video.path.split(/[\\/]/).at(-1) ?? "视频", outputs: { video: { dataType: "VIDEO", value: { url: source.video.path, mimeType: mediaMime(source.video.path) } } } },
+        });
+      }
+      for (const id of imageIds.values()) {
+        edges.push({ id: crypto.randomUUID(), source: id, sourceHandle: "image", target: generationId, targetHandle: "in" });
+      }
+    });
+    cursorX = cursorX + 360 + Math.max(1, sources.length) * 860 + 200;
+  }
+  const installed = new Set(availableNodes.value.map(node => node.type));
+  return {
+    nodes: nodes.filter(node => !node.type?.startsWith("remote-") || installed.has(node.type)),
+    edges,
+    missing: nodes.filter(node => node.type?.startsWith("remote-") && !installed.has(node.type)).length,
+  };
+}
+
+async function buildStoryboardCanvas(options?: { force?: boolean }) {
+  const directory = project.value?.directory;
+  if (!directory || !canvasReady.value || storyboardBuilding.value) return false;
+  const existing = flow.getNodes.value.filter(node => node.type !== "canvasGroup");
+  if (existing.length && !options?.force) return false;
+  storyboardBuilding.value = true;
+  try {
+    const response = await fetch(`/api/storyboard/get?directory=${encodeURIComponent(directory)}`, { headers: { "x-toonflow-workspace": "1" } });
+    if (!response.ok) throw new Error("读取分镜数据失败");
+    const payload = (await response.json()) as { data?: StoryboardPayload };
+    const meaningful = (payload.data?.segments ?? []).some(segment => (segment.prompts ?? []).some(source => source.text.trim() || source.video?.path));
+    if (!meaningful) {
+      if (options?.force) ElMessage.warning("未找到提示词或生成视频，暂无内容可生成画布");
+      return false;
+    }
+    const originX = existing.length ? Math.max(...existing.map(node => node.position.x)) + 600 : 0;
+    const graph = buildStoryboardGraph(payload.data ?? {}, originX);
+    if (!graph.nodes.length) {
+      if (options?.force) ElMessage.warning("未找到可用于生成画布的分镜、提示词或视频");
+      return false;
+    }
+    await canvasHistory.batch(async () => {
+      addNodes(graph.nodes);
+      addEdges(graph.edges);
+    });
+    ElMessage.success(`已从分镜生成 ${graph.nodes.length} 个节点${graph.missing ? `，${graph.missing} 个节点缺少插件` : ""}`);
+    return true;
+  } catch (error) {
+    if (options?.force) ElMessage.error(error instanceof Error ? error.message : "生成画布失败");
+    return false;
+  } finally {
+    storyboardBuilding.value = false;
+  }
+}
+
+// ACT: 打开画布且画布为空时自动生成一次；同一画布只自动生成一次，避免用户清空节点后被反复写回。
+watch([() => props.active, canvasReady], ([active, ready]) => {
+  if (!active || !ready || !canvasId.value || storyboardBuiltCanvases.has(canvasId.value)) return;
+  storyboardBuiltCanvases.add(canvasId.value);
+  void buildStoryboardCanvas();
+});
 provide("canvas", getCanvasContext);
 defineExpose({ canvasId, canvasReady, getCanvasContext, addNodeAtPointer, readDocumentNode, saveDocumentNode, mountDocumentNode, observeDocumentNode, prepareCanvasDelete, flushSave: flushCanvasSave, cancelSave: cancelCanvasSave,
+  buildStoryboardCanvas: (force = true) => buildStoryboardCanvas({ force }),
   openNodeSearch: () => nodeSearchRef.value?.open(),
   getCanvases: (signal?: AbortSignal) => {
     if (!canvasMenuRef.value) throw new Error("画布菜单尚未就绪");

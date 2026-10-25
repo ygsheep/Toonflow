@@ -79,9 +79,18 @@ const nodes = computed(() => {
 async function focusNode(nodeId: string) {
   if (await activateCanvasPanel?.() === false) return;
   await nextTick();
-  const canvas = getCanvas?.();
+  // ACT: 切到画布后画布列表/首个画布仍在异步加载，短暂等待后再聚焦，避免误报“尚未就绪”。
+  const canvas = await new Promise<CanvasContext | undefined>(resolve => {
+    const startedAt = Date.now();
+    const check = () => {
+      const value = getCanvas?.();
+      if (value || Date.now() - startedAt >= 2000) resolve(value);
+      else setTimeout(check, 50);
+    };
+    check();
+  });
   if (!canvas) {
-    ElMessage.error("画布尚未就绪");
+    ElMessage.error("画布仍在加载，请稍后重试");
     return;
   }
   try {

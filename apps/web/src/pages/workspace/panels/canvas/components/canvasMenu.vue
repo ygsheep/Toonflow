@@ -315,7 +315,8 @@ watch(() => props.directory, async (directory, _previous, onCleanup) => {
     let entries = await listCanvases(directory, "", false, controller.signal);
     let loaded = entries.canvases;
     if (cancelled) return;
-    if (!loaded.length && !entries.folders.length) {
+    // ACT: 只有画布文件才算“已有画布”；项目里有普通目录不等于要用目录管理画布，否则空画布项目会一直无法就绪。
+    if (!loaded.length) {
       try {
         loaded = [await createCanvasFile(directory, "画布1")];
       } catch (err) {

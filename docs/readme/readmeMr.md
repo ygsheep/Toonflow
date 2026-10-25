@@ -1,15 +1,15 @@
 <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=200&section=header&text=Toonflow&fontSize=90&fontColor=ffffff&animation=fadeIn&fontAlignY=50" alt="Toonflow" width="100%" />
 
 <p>
-  <a href="https://github.com/HBAI-Ltd/Toonflow-app">
+  <a href="https://github.com/ygsheep/Toonflow">
     <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub" />
   </a>
  | 
-  <a href="https://gitee.com/HBAI-Ltd/Toonflow-app">
+  <a href="https://gitee.com/ygsheep/Toonflow">
     <img src="https://img.shields.io/badge/Gitee-C71D23?style=flat-square&logo=gitee&logoColor=white" alt="Gitee" />
   </a>
  | 
-  <a href="https://atomgit.com/HBAI-Ltd/Toonflow-app">
+  <a href="https://atomgit.com/ygsheep/Toonflow">
     <img src="../images/atomgitLogo.svg" alt="AtomGit" height="20" />
   </a>
 </p>
@@ -56,21 +56,21 @@
 </a>
 
 <p align="center">
-  <a href="https://github.com/HBAI-Ltd/Toonflow-app/stargazers">
-    <img src="https://img.shields.io/github/stars/HBAI-Ltd/Toonflow-app?style=for-the-badge&logo=github" alt="तारे बॅज" />
+  <a href="https://github.com/ygsheep/Toonflow/stargazers">
+    <img src="https://img.shields.io/github/stars/ygsheep/Toonflow?style=for-the-badge&logo=github" alt="तारे बॅज" />
   </a>
   <a href="../../LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="MIT License बॅज" />
   </a>
-  <a href="https://github.com/HBAI-Ltd/Toonflow-app/releases">
-    <img src="https://img.shields.io/github/v/release/HBAI-Ltd/Toonflow-app?style=for-the-badge" alt="प्रकाशित आवृत्ती" />
+  <a href="https://github.com/ygsheep/Toonflow/releases">
+    <img src="https://img.shields.io/github/v/release/ygsheep/Toonflow?style=for-the-badge" alt="प्रकाशित आवृत्ती" />
   </a>
 </p>
 <p align="center">
-  <a href="https://github.com/HBAI-Ltd/Toonflow-app/network/members">
-    <img src="https://img.shields.io/github/forks/HBAI-Ltd/Toonflow-app?style=for-the-badge&logo=github&color=orange" alt="फॉर्क्स बॅज" />
+  <a href="https://github.com/ygsheep/Toonflow/network/members">
+    <img src="https://img.shields.io/github/forks/ygsheep/Toonflow?style=for-the-badge&logo=github&color=orange" alt="फॉर्क्स बॅज" />
   </a>
-  <a href="https://atomgit.com/HBAI-Ltd/Toonflow-app">
+  <a href="https://atomgit.com/ygsheep/Toonflow">
     <img src="https://img.shields.io/badge/AtomGit-G--Star%20No.540-FF6B35?style=for-the-badge&logo=git&logoColor=white" alt="AtomGit G-स्टार क्रमांक 540" />
   </a>
   <a href="https://discord.gg/HEjKmpNpAZ">
@@ -78,14 +78,14 @@
   </a>
 </p>
 <p align="center">
-  <a href="https://github.com/HBAI-Ltd/Toonflow-app/issues">
-    <img src="https://img.shields.io/github/issues/HBAI-Ltd/Toonflow-app?style=for-the-badge&color=F48D73" alt="मुद्दे" />
+  <a href="https://github.com/ygsheep/Toonflow/issues">
+    <img src="https://img.shields.io/github/issues/ygsheep/Toonflow?style=for-the-badge&color=F48D73" alt="मुद्दे" />
   </a>
-  <a href="https://github.com/HBAI-Ltd/Toonflow-app/graphs/contributors">
-    <img src="https://img.shields.io/github/contributors/HBAI-Ltd/Toonflow-app?style=for-the-badge&color=2088FF" alt="योगदानकर्ते" />
+  <a href="https://github.com/ygsheep/Toonflow/graphs/contributors">
+    <img src="https://img.shields.io/github/contributors/ygsheep/Toonflow?style=for-the-badge&color=2088FF" alt="योगदानकर्ते" />
   </a>
-  <a href="https://github.com/HBAI-Ltd/Toonflow-app/commits">
-    <img src="https://img.shields.io/github/last-commit/HBAI-Ltd/Toonflow-app?style=for-the-badge&color=blueviolet" alt="नवीनतम कमिट" />
+  <a href="https://github.com/ygsheep/Toonflow/commits">
+    <img src="https://img.shields.io/github/last-commit/ygsheep/Toonflow?style=for-the-badge&color=blueviolet" alt="नवीनतम कमिट" />
   </a>
 </p>
 <p align="center">
@@ -97,29 +97,29 @@
 
 <p align="center">
   <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
-    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=HTML" alt="HBAI-Ltd/Toonflow-app | Trendshift HTML Repository Of The Day" width="250" height="55" />
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=HTML" alt="ygsheep/Toonflow | Trendshift HTML Repository Of The Day" width="250" height="55" />
   </a>
   <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
-    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=Vue" alt="HBAI-Ltd/Toonflow-app | Trendshift Vue Repository Of The Day" width="250" height="55" />
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=Vue" alt="ygsheep/Toonflow | Trendshift Vue Repository Of The Day" width="250" height="55" />
   </a>
   <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
-    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=TypeScript" alt="HBAI-Ltd/Toonflow-app | Trendshift TypeScript Repository Of The Day" width="250" height="55" />
-  </a>
-</p>
-<p align="center">
-  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
-    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=Vue" alt="HBAI-Ltd/Toonflow-app | Trendshift Vue Repository Of The Week" width="250" height="55" />
-  </a>
-  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
-    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=HTML" alt="HBAI-Ltd/Toonflow-app | Trendshift HTML Repository Of The Week" width="250" height="55" />
-  </a>
-  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
-    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=TypeScript" alt="HBAI-Ltd/Toonflow-app | Trendshift TypeScript Repository Of The Week" width="250" height="55" />
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/daily?language=TypeScript" alt="ygsheep/Toonflow | Trendshift TypeScript Repository Of The Day" width="250" height="55" />
   </a>
 </p>
 <p align="center">
   <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
-    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/monthly?language=HTML" alt="HBAI-Ltd/Toonflow-app | Trendshift HTML Repository Of The Month" width="250" height="55" />
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=Vue" alt="ygsheep/Toonflow | Trendshift Vue Repository Of The Week" width="250" height="55" />
+  </a>
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=HTML" alt="ygsheep/Toonflow | Trendshift HTML Repository Of The Week" width="250" height="55" />
+  </a>
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/weekly?language=TypeScript" alt="ygsheep/Toonflow | Trendshift TypeScript Repository Of The Week" width="250" height="55" />
+  </a>
+</p>
+<p align="center">
+  <a href="https://trendshift.io/repositories/24197?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-24197#achievements" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/24197/monthly?language=HTML" alt="ygsheep/Toonflow | Trendshift HTML Repository Of The Month" width="250" height="55" />
   </a>
 </p>
 
@@ -147,7 +147,7 @@
 </div>
 
 <p align="center">
-<a href="https://github.com/HBAI-Ltd/Toonflow-app/releases">डाउनलोड</a> ·
+<a href="https://github.com/ygsheep/Toonflow/releases">डाउनलोड</a> ·
 <a href="https://qcn7xdsqgc4z.feishu.cn/docx/RXFqdgR2Xo0dXZxGfd0cZCGgnwf">वापरकर्ता मार्गदर्शक</a> ·
 <a href="https://api.toonflow.net/console/plugIn">प्लगइन बाजारपेठ</a> ·
 <a href="https://qcn7xdsqgc4z.feishu.cn/docx/KNBNd9naqolsy6xjAOCcEAkqnRd">डेव्हलपर दस्तऐवजीकरण</a> ·
@@ -254,9 +254,9 @@ Toonflow हे लघुनाट्ये, ॲनिमेटेड कॉम�
 
 | ऑपरेटिंग सिस्टम | GitHub |
 | --- | --- |
-| Windows | [Release](https://github.com/HBAI-Ltd/Toonflow-app/releases) |
-| macOS | [Release](https://github.com/HBAI-Ltd/Toonflow-app/releases) |
-| Android ARM64 | [APK डाउनलोड](https://github.com/HBAI-Ltd/Toonflow-app/releases/latest) |
+| Windows | [Release](https://github.com/ygsheep/Toonflow/releases) |
+| macOS | [Release](https://github.com/ygsheep/Toonflow/releases) |
+| Android ARM64 | [APK डाउनलोड](https://github.com/ygsheep/Toonflow/releases/latest) |
 
 Android अॅप फक्त ARM64 उपकरणांना समर्थन देते. रिलीज पृष्ठावरून `toonflow-VERSION-android-arm64.apk` डाउनलोड करून स्थापित करा. त्यात स्थानिक Bun बॅकएंड असून ते स्वतंत्रपणे चालू शकते. होम पृष्ठावरील «डिव्हाइस जोडणी» वापरून QR कोड स्कॅन करता येतो किंवा माहिती भरून स्थानिक नेटवर्क किंवा इंटरनेटवर शेअरिंग सुरू असलेल्या संगणक किंवा बॅकएंडशी जोडता येते.
 
@@ -307,7 +307,7 @@ sudo spctl --master-disable
 स्त्रोत क्लोन करा आणि रेपॉजिटरी रूटमध्ये खालील चालवा:
 
 ```sh
-git clone https://github.com/HBAI-Ltd/Toonflow-app.git
+git clone https://github.com/ygsheep/Toonflow.git
 cd Toonflow-app
 docker compose up -d --build
 ```
@@ -361,7 +361,7 @@ bun --version
 स्त्रोत क्लोन करा आणि सेवा सुरू करा:
 
 ```sh
-git clone https://github.com/HBAI-Ltd/Toonflow-app.git
+git clone https://github.com/ygsheep/Toonflow.git
 cd Toonflow-app
 bun install --frozen-lockfile
 
@@ -525,7 +525,7 @@ Discord मध्ये सामील होण्यासाठी तुम
 
 Toonflow [MIT License](../../LICENSE) अंतर्गत परवानाकृत आहे. तृतीय-पक्ष अवलंबित्व आणि मालमत्ता त्यांच्या संबंधित परवाने आणि कॉपीराइट सूचनांच्या अधीन राहतील.
 
-[![Toonflow स्टार इतिहास](https://api.star-history.com/svg?repos=HBAI-Ltd/Toonflow-app&type=Date)](https://www.star-history.com/#HBAI-Ltd/Toonflow-app&Date)
+[![Toonflow स्टार इतिहास](https://api.star-history.com/svg?repos=ygsheep/Toonflow&type=Date)](https://www.star-history.com/#ygsheep/Toonflow&Date)
 
 > **नॉन-रेट्रोएक्टिव्हिटी क्लॉज**: जे वापरकर्ते AGPL-3.0 अंतर्गत v1.0.8 आधीच्या आवृत्त्या वापरतात ते AGPL-3.0 च्या अधीन राहतील. v1.0.8 ते v1.1.8 आवृत्त्या Apache-2.0 आणि त्याच्या अतिरिक्त कराराच्या अधीन राहतील. हे वापरकर्ते या परवाना बदलास बांधील नाहीत.
 

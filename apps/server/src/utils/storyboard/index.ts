@@ -5,10 +5,11 @@ import { getStatus } from "@/utils/ffmpeg";
 
 const storyboardDirectory = "分镜表";
 const assetDirectory = "资产";
-// ACT: 逐镜关键帧由 ffmpeg 从段视频自动截取，放在 资产/关键帧/<段>/<素材编号>.png。
-const keyframeDirectory = "关键帧";
+// ACT: 逐镜关键帧只是分镜页的预览图，从段视频抽帧后放在 生成/关键帧/<段>/，不进入资产库。
+const keyframeDirectory = "生成/关键帧";
 const videoDirectory = "生成";
 const pendingDirectory = "生成/待归位";
+const promptDirectory = "提示词";
 const segmentNamePattern = /^第([\d.]+)段_导出$/;
 const videoExtensions = new Set([".mp4", ".mov", ".webm", ".mkv", ".m4v"]);
 const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
@@ -38,6 +39,8 @@ export type StoryboardShot = {
   asset: string;
   prompt: string;
   image: { name: string; path: string } | null;
+  // ACT: 关键帧是从段视频抽出的预览图，独立于资产库中的素材图。
+  frame: { name: string; path: string } | null;
 };
 
 export type StoryboardSegment = {
@@ -45,8 +48,37 @@ export type StoryboardSegment = {
   number: string;
   shotCount: number;
   imageCount: number;
+  frameCount: number;
   video: { name: string; path: string; exists: boolean };
+  // ACT: 参考图来自 Seedance 提示词文件的「素材清单」，只做展示与对账，不参与资产看板统计。
+  references: StoryboardReference[];
+  prompt: StoryboardPrompt | null;
+  prompts: StoryboardPromptSource[];
   shots: StoryboardShot[];
+};
+
+export type StoryboardReference = {
+  label: string;
+  name: string;
+  type: string;
+  note: string;
+  usage: string;
+  path: string | null;
+};
+
+export type StoryboardPrompt = {
+  file: string;
+  full: string;
+  shots: { no: string; text: string }[];
+};
+
+// ACT: 同一段可能有多份提示词（Seedance / H3-ComfyUI），各自对应一版生成视频，画布按份分组展示。
+export type StoryboardPromptSource = {
+  file: string;
+  title: string;
+  text: string;
+  references: StoryboardReference[];
+  video: { name: string; path: string; exists: boolean } | null;
 };
 
 export type StoryboardSnapshot = {
@@ -154,7 +186,88 @@ function composePrompt(shot: Record<string, unknown>) {
   ].filter(([, value]) => value).map(([label, value]) => `【${label}】${value}`).join("\n");
 }
 
-async function readSegment(root: string, folder: string, number: string, assets: Map<string, string>, fileSet: Set<string>): Promise<StoryboardSegment | null> {
+// ACT: 文件名里空格/下划线混用（清单写 女1_王嫣_四视图.png，磁盘是 女1 王嫣_四视图.png），匹配前统一去掉分隔符。
+function normalizeFileName(value: string) {
+  return value.toLowerCase().replace(/[\s_\-]/g, "");
+}
+
+// ACT: Segment 的镜号前缀（SC01-SH001 → SC01）决定提示词文件，文件名以场景号开头即视为本段提示词；同一段可有多份。
+function findPromptFiles(files: string[], scene: string) {
+  const candidates = files.filter(file => extname(file).toLowerCase() === ".md");
+  if (!candidates.length) return [];
+  const sceneKey = normalizeFileName(scene);
+  const matched = candidates.filter(file => sceneKey && normalizeFileName(file).includes(sceneKey));
+  const selected = matched.length ? matched : candidates.length === 1 ? candidates : [];
+  // ACT: Seedance 为主提示词，H3/ComfyUI 次之；与 01.mp4、01_1.mp4 的顺序对应。
+  const priority = (file: string) => /seedance/i.test(file) ? 0 : /h3|comfyui/i.test(file) ? 1 : 2;
+  return [...selected].sort((a, b) => priority(a) - priority(b) || a.localeCompare(b, "zh-CN", { numeric: true }));
+}
+
+function findPromptFile(files: string[], scene: string) {
+  return findPromptFiles(files, scene)[0] ?? null;
+}
+
+// ACT: 素材清单两种写法：Seedance 用 @人物1，H3 用 `<Subject 1>`，都按第二列文件名映射到资产路径。
+function parseReferences(text: string, assetByNorm: Map<string, string>) {
+  return text.split(/\r?\n/)
+    .filter(line => /^\|\s*`?[@<]/.test(line))
+    .map(line => line.split("|").slice(1, -1).map(cell => cell.trim()))
+    .filter(cells => cells.length >= 2 && imageExtensions.has(extname(cells[1]!).toLowerCase()))
+    .map(([label = "", name = "", type = "", note = "", usage = ""]) => ({
+      label: label.replace(/`/g, ""),
+      name,
+      type,
+      note,
+      usage,
+      path: resolveReference(name, assetByNorm),
+    }));
+}
+
+// ACT: 生成目录里属于本段的视频：01.mp4、01_1.mp4…按自然序，与提示词顺序一一对应。
+function segmentVideos(files: string[], number: string) {
+  const prefix = number.includes(".") ? number : number.padStart(2, "0");
+  const pattern = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([_-].*)?$`);
+  return files
+    .filter(file => videoExtensions.has(extname(file).toLowerCase()))
+    .filter(file => pattern.test(basename(file, extname(file))))
+    // ACT: 01.mp4 是第一版，01_1.mp4 是第二版；localeCompare 会把 01_1 排到 01 前面，这里按后缀数字排序。
+    .sort((a, b) => {
+      const rank = (file: string) => {
+        const base = basename(file, extname(file));
+        if (base === prefix) return 0;
+        const rest = base.slice(prefix.length).replace(/^[_-]/, "");
+        const value = Number(rest);
+        return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+      };
+      return rank(a) - rank(b) || a.localeCompare(b);
+    });
+}
+
+// ACT: 只解析 ```text 代码块；代码块外的素材清单给人看，不进提示词正文。
+function parsePromptSource(text: string) {
+  const full = /```(?:text|md|markdown)?\s*\r?\n([\s\S]*?)```/i.exec(text)?.[1]?.trim() ?? "";
+  if (!full || !full.includes("【时间轴】")) return null;
+  const timeline = /【时间轴】([\s\S]*?)(?=\n【|$)/.exec(full)?.[1] ?? "";
+  const blocks = new Map<number, string>();
+  for (const part of timeline.split(/(?=^\[镜\d+\])/m).map(item => item.trim()).filter(Boolean)) {
+    const matched = /^\[镜(\d+)\]\s*([^\n]*)\r?\n?([\s\S]*)$/.exec(part);
+    if (!matched) continue;
+    blocks.set(Number(matched[1]), [`[镜${matched[1]}] ${matched[2].trim()}`.trim(), matched[3].trim()].filter(Boolean).join("\n"));
+  }
+  const references = text.split(/\r?\n/)
+    .filter(line => /^\|\s*@/.test(line))
+    .map(line => line.split("|").slice(1, -1).map(cell => cell.trim()))
+    .filter(cells => cells.length >= 4)
+    .map(([label, name, type, note, usage]) => ({ label, name, type, note, usage: usage ?? "" }));
+  return { full, blocks, references };
+}
+
+function resolveReference(name: string, assetByNorm: Map<string, string>) {
+  const file = assetByNorm.get(normalizeFileName(name));
+  return file ? `${assetDirectory}/${file}` : null;
+}
+
+async function readSegment(root: string, folder: string, number: string, assets: Map<string, string>, assetByNorm: Map<string, string>, promptFiles: string[], videoFiles: string[]): Promise<StoryboardSegment | null> {
   const source = join(root, storyboardDirectory, folder, "分镜脚本.json");
   const text = await readFile(source, "utf8").catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return null;
@@ -169,19 +282,49 @@ async function readSegment(root: string, folder: string, number: string, assets:
   }
   if (!parsed) return null;
   const shots = Array.isArray(parsed.shots) ? parsed.shots as Record<string, unknown>[] : [];
-  const name = videoName(number);
+  const scene = /^SC\d+/.exec(readText(shots[0]?.no))?.[0] ?? "";
+  const promptFile = findPromptFile(promptFiles, scene);
+  const promptText = promptFile ? await readFile(join(root, promptDirectory, promptFile), "utf8").catch(() => null) : null;
+  const parsedPrompt = promptText ? parsePromptSource(promptText) : null;
+  const videos = segmentVideos(videoFiles, number);
+  const prompts: StoryboardPromptSource[] = await Promise.all(findPromptFiles(promptFiles, scene).map(async (file, index) => {
+    const raw = await readFile(join(root, promptDirectory, file), "utf8").catch(() => "");
+    const fenced = /```(?:text|md|markdown)?\s*\r?\n([\s\S]*?)```/i.exec(raw)?.[1]?.trim();
+    const matched = videos[index];
+    return {
+      file: `${promptDirectory}/${file}`,
+      title: basename(file, extname(file)),
+      text: fenced || raw.trim(),
+      references: parseReferences(raw, assetByNorm),
+      video: matched ? { name: matched, path: `${videoDirectory}/${matched}`, exists: true } : null,
+    };
+  }));
+  const name = videos[0] ?? videoName(number);
   const videoPath = join(root, videoDirectory, name);
+  const frameRoot = await resolveWorkspacePath(root, `${keyframeDirectory}/${folder}`, true);
+  const frameFiles = new Set(await listFiles(frameRoot.path));
   const segment: StoryboardSegment = {
     id: folder,
     number,
     shotCount: shots.length,
     imageCount: 0,
+    frameCount: 0,
     video: { name, path: `${videoDirectory}/${name}`, exists: await exists(videoPath) },
+    references: parsedPrompt?.references.map(item => ({ ...item, path: resolveReference(item.name, assetByNorm) })) ?? [],
+    prompt: parsedPrompt && promptFile
+      ? {
+        file: `${promptDirectory}/${promptFile}`,
+        full: parsedPrompt.full,
+        shots: shots.map((shot, index) => ({ no: readText(shot.no), text: parsedPrompt.blocks.get(index + 1) ?? "" })),
+      }
+      : null,
+    prompts,
     shots: shots.map(shot => {
       const asset = readText(shot.asset);
-      const keyframe = `${keyframeDirectory}/${folder}/${safeName(asset)}.png`;
-      const imageFile = asset ? (fileSet.has(keyframe) ? keyframe : assets.get(asset.toLowerCase())) : undefined;
+      const imageFile = asset ? assets.get(asset.toLowerCase()) : undefined;
       const image = imageFile ? { name: basename(imageFile), path: `${assetDirectory}/${imageFile}` } : null;
+      const frameName = `${safeName(asset)}.png`;
+      const frame = asset && frameFiles.has(frameName) ? { name: frameName, path: `${keyframeDirectory}/${folder}/${frameName}` } : null;
       return {
         no: readText(shot.no),
         scene: readText(shot.scene),
@@ -206,10 +349,12 @@ async function readSegment(root: string, folder: string, number: string, assets:
         asset,
         prompt: composePrompt(shot),
         image,
+        frame,
       };
     }),
   };
   segment.imageCount = segment.shots.filter(shot => shot.image).length;
+  segment.frameCount = segment.shots.filter(shot => shot.frame).length;
   return segment;
 }
 
@@ -268,7 +413,7 @@ async function extractKeyframes(root: string, segment: StoryboardSegment) {
 
   extracting.add(guard);
   try {
-    const directory = join(root, assetDirectory, keyframeDirectory, segment.id);
+    const directory = join(root, keyframeDirectory, segment.id);
     let start = 0;
     let failed = false;
     for (const shot of shots) {
@@ -301,12 +446,15 @@ export async function scanStoryboard(root: string): Promise<StoryboardSnapshot> 
   const assetRoot = await resolveWorkspacePath(root, assetDirectory, true);
   const assetFiles = (await listFilesDeep(assetRoot.path)).filter(file => imageExtensions.has(extname(file).toLowerCase()));
   const assets = new Map(assetFiles.map(file => [basename(file, extname(file)).toLowerCase(), file]));
-  const fileSet = new Set(assetFiles);
+  const assetByNorm = new Map(assetFiles.map(file => [normalizeFileName(basename(file)), file]));
+  const promptRoot = await resolveWorkspacePath(root, promptDirectory, true);
+  const promptFiles = await listFilesDeep(promptRoot.path);
+  const videoFiles = await listFiles((await resolveWorkspacePath(root, videoDirectory, true)).path);
   const discovered = folders.flatMap(entry => {
     const matched = entry.isDirectory() ? segmentNamePattern.exec(entry.name) : null;
     return matched ? [{ folder: entry.name, number: matched[1] }] : [];
   }).sort((a, b) => Number(a.number) - Number(b.number));
-  const segments = await Promise.all(discovered.map(item => readSegment(root, item.folder, item.number, assets, fileSet)));
+  const segments = await Promise.all(discovered.map(item => readSegment(root, item.folder, item.number, assets, assetByNorm, promptFiles, videoFiles)));
   const pending = (await listFiles((await resolveWorkspacePath(root, pendingDirectory, true)).path))
     .filter(name => videoExtensions.has(extname(name).toLowerCase()));
   const snapshot: StoryboardSnapshot = { segments: segments.filter((segment): segment is StoryboardSegment => segment !== null), pending };
@@ -326,10 +474,11 @@ export async function scanStoryboardAssets(root: string): Promise<StoryboardAsse
 
   for (const segment of segments) {
     for (const shot of segment.shots) {
-      if (!shot.asset) continue;
+      // ACT: 只有 资产/ 中真实存在的图片才算资产条目；关键帧预览不进资产看板。
+      if (!shot.asset || !shot.image) continue;
       const key = shot.asset.toLowerCase();
       const entry = entries.get(key) ?? { id: shot.asset, name: "", type: "", file: null, refs: [], note: "", source: "storyboard" as const };
-      const relative = shot.image ? shot.image.path.slice(assetDirectory.length + 1) : null;
+      const relative = shot.image.path.startsWith(`${assetDirectory}/`) ? shot.image.path.slice(assetDirectory.length + 1) : null;
       if (relative) {
         entry.file = relative;
         referenced.add(relative);

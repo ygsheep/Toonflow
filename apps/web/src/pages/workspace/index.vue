@@ -61,6 +61,11 @@
                 <icon-search :size="18" aria-hidden="true" />
               </el-button>
             </el-tooltip>
+            <el-tooltip content="从分镜生成画布（提示词 + 参考图 + 视频）" placement="top" :showArrow="false" :hideAfter="0" :enterable="false" :triggerKeys="[]">
+              <el-button class="toolButton" text :disabled="!canvasPanelRef?.canvasReady || settingsVisible" aria-label="从分镜生成画布" @click="canvasPanelRef?.buildStoryboardCanvas()">
+                <icon-sparkles :size="18" aria-hidden="true" />
+              </el-button>
+            </el-tooltip>
             <el-tooltip :showArrow="false" content="帮助" placement="top" :hideAfter="0" :enterable="false" :triggerKeys="[]" :disabled="helpVisible">
               <span class="toolTrigger">
                 <el-popover v-model:visible="helpVisible" trigger="click" placement="top-end" :width="196">
@@ -135,7 +140,7 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onScopeDispose, provide, ref, shallowRef, watch, type ComponentPublicInstance } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import axios from "axios";
-import { IconVector, IconFileText, IconMovie, IconPhoto, IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase } from "@tabler/icons-vue";
+import { IconVector, IconFileText, IconMovie, IconPhoto, IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase, IconSparkles } from "@tabler/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { QRCode } from "tdesign-vue-next";
 import settings from "@/components/settings/index.vue";

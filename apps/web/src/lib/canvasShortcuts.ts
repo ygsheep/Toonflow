@@ -10,7 +10,8 @@ export const defaultCanvasShortcuts = {
   copyOnDrag: "Alt",
   duplicateOnDrag: isMac ? "Alt+Meta" : "Ctrl+Alt",
   pan: "Space",
-  zoom: "Ctrl",
+  // ACT: 默认滚轮直接缩放（与原先 Ctrl+滚轮等价），画布平移保留 Space 拖拽。
+  zoom: "None",
   selection: "None",
   multiSelection: "",
   moveTool: "KeyV",

@@ -5,7 +5,7 @@ metadata:
   version: "1.1.0"
   displayName: v1.1.8 分集制作流程
   author: Toonflow
-  github: https://github.com/HBAI-Ltd/Toonflow-app
+  github: https://github.com/ygsheep/Toonflow
 ---
 
 # v1.1.8 分集制作流程

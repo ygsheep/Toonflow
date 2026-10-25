@@ -5,7 +5,7 @@ metadata:
   version: "2.7.0"
   displayName: 视频制作工作流
   author: Toonflow
-  github: https://github.com/HBAI-Ltd/Toonflow-app
+  github: https://github.com/ygsheep/Toonflow
 ---
 
 # Toonflow 画布制作工作流

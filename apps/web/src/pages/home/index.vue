@@ -38,7 +38,7 @@
           </span>
           <span class="sidebarText">设置</span>
         </button>
-        <a class="sidebarItem githubLink" href="https://github.com/HBAI-Ltd/Toonflow-app" target="_blank" rel="noopener noreferrer" aria-label="GitHub" title="GitHub">
+        <a class="sidebarItem githubLink" href="https://github.com/ygsheep/Toonflow" target="_blank" rel="noopener noreferrer" aria-label="GitHub" title="GitHub">
           <icon-brand-github :size="18" aria-hidden="true" />
           <span class="sidebarText">GitHub</span>
         </a>
