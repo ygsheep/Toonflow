@@ -25,6 +25,8 @@
         :fileAction="performFileAction"
         :saveNode="saveDocumentNode" />
     </keep-alive>
+    <storyboardPanel v-if="activePanel === 'storyboard'" :key="workspaceStore.project?.directory" />
+    <assetsPanel v-if="activePanel === 'assets'" :key="workspaceStore.project?.directory" />
     <workspaceMenu class="workspaceMenu" @openSettings="settingsVisible = true" />
     <div class="workspaceTools">
       <el-segmented :modelValue="activePanel" class="panelSwitcher" :options="panelOptions" size="small" aria-label="切换面板" @change="switchPanel">
@@ -133,7 +135,7 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onScopeDispose, provide, ref, shallowRef, watch, type ComponentPublicInstance } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import axios from "axios";
-import { IconVector, IconFileText, IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase } from "@tabler/icons-vue";
+import { IconVector, IconFileText, IconMovie, IconPhoto, IconPointer, IconHandStop, IconPlus, IconSearch, IconHelp, IconBook, IconBug, IconBrandWechat, IconBriefcase } from "@tabler/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { QRCode } from "tdesign-vue-next";
 import settings from "@/components/settings/index.vue";
@@ -147,8 +149,10 @@ import workspaceMenu from "./components/workspaceMenu.vue";
 import floatingAgent from "./components/floatingAgent.vue";
 
 const documentPanel = defineAsyncComponent(() => import("./panels/document/index.vue"));
+const storyboardPanel = defineAsyncComponent(() => import("./panels/storyboard/index.vue"));
+const assetsPanel = defineAsyncComponent(() => import("./panels/assets/index.vue"));
 
-const activePanel = ref<"canvas" | "document">("canvas");
+const activePanel = ref<"canvas" | "document" | "storyboard" | "assets">("canvas");
 const selectedTool = ref<"move" | "hand">("move");
 const sideButtonEvents = ["mousedown", "mouseup", "auxclick"] as const;
 // 鼠标侧键会直接触发原生历史导航，需在 DOM 事件阶段拦截，避免生成中的工作区被误关闭。
@@ -167,6 +171,8 @@ useProviderBalances();
 const panelOptions = [
   { label: "画布", value: "canvas", icon: IconVector },
   { label: "文档", value: "document", icon: IconFileText },
+  { label: "分镜", value: "storyboard", icon: IconMovie },
+  { label: "资产", value: "assets", icon: IconPhoto },
 ];
 const agentVisible = ref(true);
 const agentWidth = ref(0);
@@ -302,13 +308,13 @@ onBeforeRouteLeave(async () => {
 });
 
 async function switchPanel(value: string | number | boolean) {
-  if (value !== "canvas" && value !== "document") return false;
+  if (value !== "canvas" && value !== "document" && value !== "storyboard" && value !== "assets") return false;
   try {
     if (activePanel.value === "document") await documentPanelRef.value?.flushSave();
     const changed = activePanel.value !== value;
     activePanel.value = value;
     await nextTick();
-    if (changed) anonymousData.track(value === "canvas" ? "workspace.canvas" : "workspace.document");
+    if (changed) anonymousData.track(`workspace.${value}`);
     return true;
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "文本保存失败");

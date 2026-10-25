@@ -19,6 +19,7 @@ import * as canvas from "@/agent/bridge/canvas";
 import * as question from "@/agent/bridge/question";
 import * as workspace from "@/utils/workspace";
 import * as workspaceFile from "@/utils/workspace/files";
+import * as storyboard from "@/utils/storyboard";
 import * as workspaceDownload from "@/utils/workspace/download";
 import * as chatImages from "@/utils/workspace/chatImages";
 import * as skillFile from "@/utils/skills/files";
@@ -56,6 +57,7 @@ export default {
   question,
   workspace,
   workspaceFile,
+  storyboard,
   workspaceDownload,
   chatImages,
   skillFile,

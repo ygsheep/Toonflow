@@ -5,7 +5,7 @@ import { customProviders, privacySettings, settings } from "@/stores/settings";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { isDesktop } from "./platform";
 
-type UsageEvent = "onboarding.complete" | "onboarding.skip" | "workspace.canvas" | "workspace.document";
+type UsageEvent = "onboarding.complete" | "onboarding.skip" | "workspace.canvas" | "workspace.document" | "workspace.storyboard" | "workspace.assets";
 type AgentOutcome = "success" | "failed" | "cancelled";
 type CanvasSnapshot = { nodes: readonly { type?: string }[]; edgeCount: number };
 const nodeTypes = ["textNode", "imageNode", "videoNode", "audioNode", "imageGenerationNode", "videoGenerationNode", "audioGenerationNode", "director3dNode", "canvasGroup"];

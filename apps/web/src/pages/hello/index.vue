@@ -28,7 +28,7 @@
       </div>
       <div v-else class="welcomeContent">
         <h1 id="welcomeTitle">快速开始</h1>
-        <p class="description">选择登录TF-Router可直接自动配置，无需任何复杂操作，即可开始创作。</p>
+        <p class="description">登录 TF-Router 可自动配置模型，这一步可选；跳过登录也能直接使用本地功能。</p>
 
         <el-button class="loginButton" type="primary" @click="openLogin">
           <icon-login class="buttonIcon" />
@@ -41,7 +41,7 @@
             添加私有提供商
           </el-button>
           <span class="separator">或</span>
-          <el-button class="secondaryButton" round :loading="saving" @click="completeSetup">稍后配置</el-button>
+          <el-button class="secondaryButton" round :loading="saving" @click="completeSetup">跳过登录，直接使用</el-button>
         </div>
       </div>
 
