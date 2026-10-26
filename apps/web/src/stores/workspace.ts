@@ -24,6 +24,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     signal?.throwIfAborted();
     if (data.code !== 200 || !data.data?.directory) throw new Error(data.message || "工作目录校验失败");
     const checkedDirectory = data.data.directory;
+    // ACT: 新建与打开项目都经过这里：工作区缺 README.md 时由服务端补一份格式说明，失败不影响打开流程。
+    void axios.post("/api/workspaces/readme", { directory: checkedDirectory }, { headers: { "x-toonflow-workspace": "1" } }).catch(() => undefined);
     const existing = projectList.value.find(project => project.directory === previousDirectory)
       ?? projectList.value.find(project => project.directory === checkedDirectory);
     const added = { directory: checkedDirectory, name: name?.trim() || existing?.name || checkedDirectory.split(/[\\/]/).filter(Boolean).at(-1) || checkedDirectory, lastOpenedAt: Date.now() };

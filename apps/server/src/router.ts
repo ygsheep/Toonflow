@@ -140,7 +140,8 @@ import route137 from "./routes/workspaces/files/rename";
 import route138 from "./routes/workspaces/files/reveal";
 import route139 from "./routes/workspaces/files/write";
 import route140 from "./routes/workspaces/list";
-import route141 from "./routes/workspaces/selectDirectory";
+import route141 from "./routes/workspaces/readme";
+import route142 from "./routes/workspaces/selectDirectory";
 
 export default (app: Express) => {
   app.use("/api/agent", route1);
@@ -283,5 +284,6 @@ export default (app: Express) => {
   app.use("/api/workspaces/files/reveal", route138);
   app.use("/api/workspaces/files/write", route139);
   app.use("/api/workspaces/list", route140);
-  app.use("/api/workspaces/selectDirectory", route141);
+  app.use("/api/workspaces/readme", route141);
+  app.use("/api/workspaces/selectDirectory", route142);
 }

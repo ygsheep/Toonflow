@@ -5,6 +5,8 @@ import conf from "@/utils/conf";
 import { getMobileLinkConfig, isMobileLinkRequest } from "@/utils/mobileLink";
 import { getRuntimePlatform } from "@/lib/platform";
 
+export { ensureWorkspaceReadme } from "./readme";
+
 export function isLocalWorkspaceRequest(req: Request) {
   if (isMobileLinkRequest(req)) return false;
   const localAddress = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress ?? "") && req.get("x-toonflow-local-client") !== "0";

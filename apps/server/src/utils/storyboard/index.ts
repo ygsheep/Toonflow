@@ -188,40 +188,50 @@ function composePrompt(shot: Record<string, unknown>) {
   ].filter(([, value]) => value).map(([label, value]) => `【${label}】${value}`).join("\n");
 }
 
-// ACT: 文件名里空格/下划线混用（清单写 女1_王嫣_四视图.png，磁盘是 女1 王嫣_四视图.png），匹配前统一去掉分隔符。
+// ACT: 文件名里空格/下划线混用（清单写 女1_王嫣_四视图.png，磁盘是 女1 王嫣_四视图.png），匹配前统一去掉分隔符与 Markdown 转义。
 function normalizeFileName(value: string) {
-  return value.toLowerCase().replace(/[\s_\-]/g, "");
+  return value.toLowerCase().replace(/[\s_\-\\]/g, "");
 }
 
-// ACT: Segment 的镜号前缀（SC01-SH001 → SC01）决定提示词文件，文件名以场景号开头即视为本段提示词；同一段可有多份。
-function findPromptFiles(files: string[], scene: string) {
+// ACT: 稿件里的 08\_云天娇\_53-54集.png 是 Markdown 转义写法，展示与匹配前先还原。
+function unescapeMarkdown(value: string) {
+  return value.replace(/\\(.)/g, "$1");
+}
+
+// ACT: 提示词归属按三道判据依次放宽：文件名含场景号 → 正文含本段任一镜号 → 目录内仅一份 md；命中后按 Seedance/H3 排序。
+async function findPromptFiles(root: string, files: string[], scene: string, shotNos: string[]) {
   const candidates = files.filter(file => extname(file).toLowerCase() === ".md");
   if (!candidates.length) return [];
   const sceneKey = normalizeFileName(scene);
-  const matched = candidates.filter(file => sceneKey && normalizeFileName(file).includes(sceneKey));
+  const byName = candidates.filter(file => sceneKey && normalizeFileName(file).includes(sceneKey));
+  // ACT: 文件名不带场景号的稿件（如 08_06b 前缀）靠正文里出现的镜号认领，不依赖命名约定；文件名已命中时不再逐个读正文。
+  const byContent: string[] = [];
+  if (!byName.length) {
+    for (const file of candidates) {
+      const text = await readFile(join(root, promptDirectory, file), "utf8").catch(() => "");
+      if (text && shotNos.some(no => no && text.includes(no))) byContent.push(file);
+    }
+  }
+  const matched = byName.length ? byName : byContent;
   const selected = matched.length ? matched : candidates.length === 1 ? candidates : [];
   // ACT: Seedance 为主提示词，H3/ComfyUI 次之；与 01.mp4、01_1.mp4 的顺序对应。
   const priority = (file: string) => /seedance/i.test(file) ? 0 : /h3|comfyui/i.test(file) ? 1 : 2;
   return [...selected].sort((a, b) => priority(a) - priority(b) || a.localeCompare(b, "zh-CN", { numeric: true }));
 }
 
-function findPromptFile(files: string[], scene: string) {
-  return findPromptFiles(files, scene)[0] ?? null;
-}
-
-// ACT: 素材清单两种写法：Seedance 用 @人物1，H3 用 `<Subject 1>`，都按第二列文件名映射到资产路径。
-function parseReferences(text: string, assetByNorm: Map<string, string>) {
+// ACT: 素材清单两种写法：Seedance 用 @人物1，H3 用 `<Subject 1>`；两列表也可用，缺列按空串补齐。
+function parseReferences(text: string, assetByNorm: Map<string, string>, assetByBase: Map<string, string>) {
   return text.split(/\r?\n/)
     .filter(line => /^\|\s*`?[@<]/.test(line))
     .map(line => line.split("|").slice(1, -1).map(cell => cell.trim()))
     .filter(cells => cells.length >= 2 && imageExtensions.has(extname(cells[1]!).toLowerCase()))
     .map(([label = "", name = "", type = "", note = "", usage = ""]) => ({
       label: label.replace(/`/g, ""),
-      name,
+      name: unescapeMarkdown(name),
       type,
       note,
       usage,
-      path: resolveReference(name, assetByNorm),
+      path: resolveReference(name, assetByNorm, assetByBase),
     }));
 }
 
@@ -245,9 +255,16 @@ function segmentVideos(files: string[], number: string) {
     });
 }
 
-// ACT: 只解析 ```text 代码块；代码块外的素材清单给人看，不进提示词正文。
-function parsePromptSource(text: string) {
-  const full = /```(?:text|md|markdown)?\s*\r?\n([\s\S]*?)```/i.exec(text)?.[1]?.trim() ?? "";
+// ACT: 一份稿件常按【风格】【主体描述】【时间轴】分段写多个代码块，取含【时间轴】且最长的那块作为正文，避免被【风格】块抢先。
+function pickPromptBody(text: string) {
+  const blocks = [...text.matchAll(/```(?:text|md|markdown)?[^\n]*\r?\n([\s\S]*?)```/gi)].map(match => match[1]!.trim()).filter(Boolean);
+  const timelines = blocks.filter(block => block.includes("【时间轴】"));
+  return (timelines.length ? timelines : blocks).sort((a, b) => b.length - a.length)[0] ?? "";
+}
+
+// ACT: 解析提示词正文；只解析代码块内容，代码块外的素材清单给人看，不进正文。
+function parsePromptSource(text: string, assetByNorm: Map<string, string>, assetByBase: Map<string, string>) {
+  const full = pickPromptBody(text);
   if (!full || !full.includes("【时间轴】")) return null;
   const timeline = /【时间轴】([\s\S]*?)(?=\n【|$)/.exec(full)?.[1] ?? "";
   const blocks = new Map<number, string>();
@@ -256,20 +273,41 @@ function parsePromptSource(text: string) {
     if (!matched) continue;
     blocks.set(Number(matched[1]), [`[镜${matched[1]}] ${matched[2].trim()}`.trim(), matched[3].trim()].filter(Boolean).join("\n"));
   }
+  // ACT: 两列素材表（占位 + 文件名）同样可用，非图片行（如音色 mp3）只保留文件名、不给路径。
   const references = text.split(/\r?\n/)
-    .filter(line => /^\|\s*@/.test(line))
+    .filter(line => /^\|\s*`?[@<]/.test(line))
     .map(line => line.split("|").slice(1, -1).map(cell => cell.trim()))
-    .filter(cells => cells.length >= 4)
-    .map(([label, name, type, note, usage]) => ({ label, name, type, note, usage: usage ?? "" }));
+    .filter(cells => cells.length >= 2)
+    .map(([label = "", name = "", type = "", note = "", usage = ""]) => ({
+      label: label.replace(/`/g, ""),
+      name: unescapeMarkdown(name),
+      type,
+      note,
+      usage,
+      path: imageExtensions.has(extname(unescapeMarkdown(name)).toLowerCase()) ? resolveReference(name, assetByNorm, assetByBase) : null,
+    }));
   return { full, blocks, references };
 }
 
-function resolveReference(name: string, assetByNorm: Map<string, string>) {
-  const file = assetByNorm.get(normalizeFileName(name));
+// ACT: 资产名匹配带四级回退：去掉目录前缀后按原名、去扩展名、去数字前缀（稿件写 08_ 前缀、资产库没有）逐级尝试。
+function findAsset(name: string, assetByNorm: Map<string, string>, assetByBase: Map<string, string>) {
+  const fileName = unescapeMarkdown(name).split(/[/\\]/).pop() ?? "";
+  const full = normalizeFileName(fileName);
+  const base = full.replace(/\.[^.]+$/, "");
+  for (const key of [full, base, full.replace(/^\d+/, ""), base.replace(/^\d+/, "")]) {
+    if (!key) continue;
+    const file = assetByNorm.get(key) ?? assetByBase.get(key);
+    if (file) return file;
+  }
+  return null;
+}
+
+function resolveReference(name: string, assetByNorm: Map<string, string>, assetByBase: Map<string, string>) {
+  const file = findAsset(name, assetByNorm, assetByBase);
   return file ? `${assetDirectory}/${file}` : null;
 }
 
-async function readSegment(root: string, folder: string, number: string, assets: Map<string, string>, assetByNorm: Map<string, string>, promptFiles: string[], videoFiles: string[]): Promise<StoryboardSegment | null> {
+async function readSegment(root: string, folder: string, number: string, assets: Map<string, string>, assetByNorm: Map<string, string>, assetByBase: Map<string, string>, promptFileList: string[], videoFiles: string[]): Promise<StoryboardSegment | null> {
   const source = join(root, storyboardDirectory, folder, "分镜脚本.json");
   const text = await readFile(source, "utf8").catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return null;
@@ -285,19 +323,20 @@ async function readSegment(root: string, folder: string, number: string, assets:
   if (!parsed) return null;
   const shots = Array.isArray(parsed.shots) ? parsed.shots as Record<string, unknown>[] : [];
   const scene = /^SC\d+/.exec(readText(shots[0]?.no))?.[0] ?? "";
-  const promptFile = findPromptFile(promptFiles, scene);
+  const matchedPromptFiles = await findPromptFiles(root, promptFileList, scene, shots.map(shot => readText(shot.no)));
+  const promptFile = matchedPromptFiles[0] ?? null;
   const promptText = promptFile ? await readFile(join(root, promptDirectory, promptFile), "utf8").catch(() => null) : null;
-  const parsedPrompt = promptText ? parsePromptSource(promptText) : null;
+  const parsedPrompt = promptText ? parsePromptSource(promptText, assetByNorm, assetByBase) : null;
   const videos = segmentVideos(videoFiles, number);
-  const prompts: StoryboardPromptSource[] = await Promise.all(findPromptFiles(promptFiles, scene).map(async (file, index) => {
+  const prompts: StoryboardPromptSource[] = await Promise.all(matchedPromptFiles.map(async (file, index) => {
     const raw = await readFile(join(root, promptDirectory, file), "utf8").catch(() => "");
-    const fenced = /```(?:text|md|markdown)?\s*\r?\n([\s\S]*?)```/i.exec(raw)?.[1]?.trim();
+    const body = pickPromptBody(raw);
     const matched = videos[index];
     return {
       file: `${promptDirectory}/${file}`,
       title: basename(file, extname(file)),
-      text: fenced || raw.trim(),
-      references: parseReferences(raw, assetByNorm),
+      text: body || raw.trim(),
+      references: parseReferences(raw, assetByNorm, assetByBase),
       video: matched ? { name: matched, path: `${videoDirectory}/${matched}`, exists: true } : null,
     };
   }));
@@ -312,7 +351,7 @@ async function readSegment(root: string, folder: string, number: string, assets:
     imageCount: 0,
     frameCount: 0,
     video: { name, path: `${videoDirectory}/${name}`, exists: await exists(videoPath) },
-    references: parsedPrompt?.references.map(item => ({ ...item, path: resolveReference(item.name, assetByNorm) })) ?? [],
+    references: parsedPrompt?.references.map(item => ({ ...item, path: resolveReference(item.name, assetByNorm, assetByBase) })) ?? [],
     prompt: parsedPrompt && promptFile
       ? {
         file: `${promptDirectory}/${promptFile}`,
@@ -323,7 +362,8 @@ async function readSegment(root: string, folder: string, number: string, assets:
     prompts,
     shots: shots.map(shot => {
       const asset = readText(shot.asset);
-      const imageFile = asset ? assets.get(asset.toLowerCase()) : undefined;
+      // ACT: asset 先按“文件名去扩展名”精确匹配，再按归一化名兜底（分镜表写 女1_王嫣、资产文件叫 女1 王嫣.png）。
+      const imageFile = asset ? assets.get(asset.toLowerCase()) ?? findAsset(asset, assetByNorm, assetByBase) : undefined;
       const image = imageFile ? { name: basename(imageFile), path: `${assetDirectory}/${imageFile}` } : null;
       const frameName = `${safeName(asset)}.png`;
       const frame = asset && frameFiles.has(frameName) ? { name: frameName, path: `${keyframeDirectory}/${folder}/${frameName}` } : null;
@@ -449,6 +489,8 @@ export async function scanStoryboard(root: string): Promise<StoryboardSnapshot> 
   const assetFiles = (await listFilesDeep(assetRoot.path)).filter(file => imageExtensions.has(extname(file).toLowerCase()));
   const assets = new Map(assetFiles.map(file => [basename(file, extname(file)).toLowerCase(), file]));
   const assetByNorm = new Map(assetFiles.map(file => [normalizeFileName(basename(file)), file]));
+  // ACT: 去掉扩展名的归一化索引，供分镜表的 asset 字段与稿件素材清单回退匹配。
+  const assetByBase = new Map(assetFiles.map(file => [normalizeFileName(basename(file, extname(file))), file]));
   const promptRoot = await resolveWorkspacePath(root, promptDirectory, true);
   const promptFiles = await listFilesDeep(promptRoot.path);
   const videoFiles = await listFiles((await resolveWorkspacePath(root, videoDirectory, true)).path);
@@ -456,7 +498,7 @@ export async function scanStoryboard(root: string): Promise<StoryboardSnapshot> 
     const matched = entry.isDirectory() ? segmentNamePattern.exec(entry.name) : null;
     return matched ? [{ folder: entry.name, number: matched[1] }] : [];
   }).sort((a, b) => Number(a.number) - Number(b.number));
-  const segments = await Promise.all(discovered.map(item => readSegment(root, item.folder, item.number, assets, assetByNorm, promptFiles, videoFiles)));
+  const segments = await Promise.all(discovered.map(item => readSegment(root, item.folder, item.number, assets, assetByNorm, assetByBase, promptFiles, videoFiles)));
   const pending = (await listFiles((await resolveWorkspacePath(root, pendingDirectory, true)).path))
     .filter(name => videoExtensions.has(extname(name).toLowerCase()));
   const snapshot: StoryboardSnapshot = { segments: segments.filter((segment): segment is StoryboardSegment => segment !== null), pending };
