@@ -2,6 +2,7 @@ import { lstat, mkdir, readFile, readdir, unlink } from "@toonflow/file";
 import { basename, extname, join } from "node:path";
 import { lockWorkspaceFiles, renameWorkspaceFile, resolveWorkspacePath } from "@/utils/workspace/files";
 import { getStatus } from "@/utils/ffmpeg";
+import { reviewSegment, type StoryboardIssue } from "./review";
 
 const storyboardDirectory = "分镜表";
 const assetDirectory = "资产";
@@ -49,6 +50,11 @@ export type StoryboardSegment = {
   shotCount: number;
   imageCount: number;
   frameCount: number;
+  // ACT: 源文件相对路径与解析错误一起返回，面板才能把坏稿显示成“无法解析”而不是整段消失。
+  source: string;
+  parseError?: string;
+  issues: StoryboardIssue[];
+  orphanPrompts: string[];
   video: { name: string; path: string; exists: boolean };
   // ACT: 参考图来自 Seedance 提示词文件的「素材清单」，只做展示与对账，不参与资产看板统计。
   references: StoryboardReference[];
@@ -286,7 +292,7 @@ function parsePromptSource(text: string, assetByNorm: Map<string, string>, asset
       usage,
       path: imageExtensions.has(extname(unescapeMarkdown(name)).toLowerCase()) ? resolveReference(name, assetByNorm, assetByBase) : null,
     }));
-  return { full, blocks, references };
+  return { full, blocks, blocksList: [...blocks.keys()], references };
 }
 
 // ACT: 资产名匹配带四级回退：去掉目录前缀后按原名、去扩展名、去数字前缀（稿件写 08_ 前缀、资产库没有）逐级尝试。
@@ -307,6 +313,35 @@ function resolveReference(name: string, assetByNorm: Map<string, string>, assetB
   return file ? `${assetDirectory}/${file}` : null;
 }
 
+// ACT: 坏稿也要出现在分段列表里，只解析失败的分段带一条 p0 问题，其余字段留空。
+function failedSegment(folder: string, number: string, source: string, message: string): StoryboardSegment {
+  return {
+    id: folder,
+    number,
+    shotCount: 0,
+    imageCount: 0,
+    frameCount: 0,
+    source,
+    parseError: message,
+    issues: [{
+      id: `${folder}|parse-error|-|文件|${source}`,
+      code: "parse-error",
+      shotNo: "",
+      field: "文件",
+      severity: "p0",
+      source: "auto",
+      desc: message,
+      fix: "检查 JSON 语法与 shots 数组，修正后重新导出",
+    }],
+    orphanPrompts: [],
+    video: { name: videoName(number), path: `${videoDirectory}/${videoName(number)}`, exists: false },
+    references: [],
+    prompt: null,
+    prompts: [],
+    shots: [],
+  };
+}
+
 async function readSegment(root: string, folder: string, number: string, assets: Map<string, string>, assetByNorm: Map<string, string>, assetByBase: Map<string, string>, promptFileList: string[], videoFiles: string[]): Promise<StoryboardSegment | null> {
   const source = join(root, storyboardDirectory, folder, "分镜脚本.json");
   const text = await readFile(source, "utf8").catch((error: NodeJS.ErrnoException) => {
@@ -314,14 +349,16 @@ async function readSegment(root: string, folder: string, number: string, assets:
     throw error;
   });
   if (text === null) return null;
+  const relativeSource = `${storyboardDirectory}/${folder}/分镜脚本.json`;
   let parsed: { shots?: unknown } | null;
   try {
     parsed = JSON.parse(text);
-  } catch {
-    return null;
+  } catch (error) {
+    return failedSegment(folder, number, relativeSource, `JSON 解析失败：${error instanceof Error ? error.message : "格式错误"}`);
   }
-  if (!parsed) return null;
-  const shots = Array.isArray(parsed.shots) ? parsed.shots as Record<string, unknown>[] : [];
+  if (!parsed || typeof parsed !== "object") return failedSegment(folder, number, relativeSource, "文件内容不是对象");
+  if (!Array.isArray(parsed.shots)) return failedSegment(folder, number, relativeSource, "缺少 shots 数组");
+  const shots = parsed.shots as Record<string, unknown>[];
   const scene = /^SC\d+/.exec(readText(shots[0]?.no))?.[0] ?? "";
   const matchedPromptFiles = await findPromptFiles(root, promptFileList, scene, shots.map(shot => readText(shot.no)));
   const promptFile = matchedPromptFiles[0] ?? null;
@@ -344,21 +381,25 @@ async function readSegment(root: string, folder: string, number: string, assets:
   const videoPath = join(root, videoDirectory, name);
   const frameRoot = await resolveWorkspacePath(root, `${keyframeDirectory}/${folder}`, true);
   const frameFiles = new Set(await listFiles(frameRoot.path));
+  const prompt = parsedPrompt && promptFile
+    ? {
+      file: `${promptDirectory}/${promptFile}`,
+      full: parsedPrompt.full,
+      shots: shots.map((shot, index) => ({ no: readText(shot.no), text: parsedPrompt.blocks.get(index + 1) ?? "" })),
+    }
+    : null;
   const segment: StoryboardSegment = {
     id: folder,
     number,
     shotCount: shots.length,
     imageCount: 0,
     frameCount: 0,
+    source: relativeSource,
+    issues: [],
+    orphanPrompts: [],
     video: { name, path: `${videoDirectory}/${name}`, exists: await exists(videoPath) },
     references: parsedPrompt?.references.map(item => ({ ...item, path: resolveReference(item.name, assetByNorm, assetByBase) })) ?? [],
-    prompt: parsedPrompt && promptFile
-      ? {
-        file: `${promptDirectory}/${promptFile}`,
-        full: parsedPrompt.full,
-        shots: shots.map((shot, index) => ({ no: readText(shot.no), text: parsedPrompt.blocks.get(index + 1) ?? "" })),
-      }
-      : null,
+    prompt,
     prompts,
     shots: shots.map(shot => {
       const asset = readText(shot.asset);
@@ -397,6 +438,14 @@ async function readSegment(root: string, folder: string, number: string, assets:
   };
   segment.imageCount = segment.shots.filter(shot => shot.image).length;
   segment.frameCount = segment.shots.filter(shot => shot.frame).length;
+  const review = reviewSegment({
+    segmentId: folder,
+    shots: segment.shots,
+    prompt: prompt && parsedPrompt ? { ...prompt, blocks: parsedPrompt.blocksList } : null,
+    references: segment.references,
+  });
+  segment.issues = review.issues;
+  segment.orphanPrompts = review.orphanPrompts;
   return segment;
 }
 

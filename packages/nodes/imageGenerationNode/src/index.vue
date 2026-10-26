@@ -182,8 +182,13 @@ const sizeOptions = computed(() => (selectedModel.value?.imageSizes?.length ? se
 const ratioOptions = computed(() => (selectedModel.value?.imageRatios?.length ? selectedModel.value.imageRatios : ["16:9"]));
 watch(
   selectedModel,
-  (choice) => {
+  (choice, previous) => {
     if (!choice) return;
+    // ACT: 参考图模型自动带入供应商默认提示词，保证提示词必填；用户自行编辑后不再覆盖。
+    if (choice.defaultPrompt && (!data.value.prompt.trim() || data.value.prompt === previous?.defaultPrompt)) {
+      data.value.prompt = choice.defaultPrompt;
+      data.value.promptModel = choice.defaultPrompt.split("\n").map((text) => [{ type: "Write", text }]);
+    }
     // ACT: 现有分辨率使用 K 单位；出现其他单位时再统一换算，未知名称排在数值选项之后。
     if (!sizeOptions.value.includes(data.value.size)) data.value.size = sizeOptions.value.toSorted((left, right) =>
       (Number.parseFloat(left) || Infinity) - (Number.parseFloat(right) || Infinity)

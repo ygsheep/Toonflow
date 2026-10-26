@@ -17,6 +17,7 @@ interface ProviderModel {
   type: ModelType;
   think?: boolean;
   mode?: (ImageMode | VideoMode)[];
+  defaultPrompt?: string;
   associationSkills?: string;
   audio?: "optional" | boolean;
   imageSizes?: string[];
