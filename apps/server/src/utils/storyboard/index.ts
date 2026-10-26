@@ -91,6 +91,8 @@ export type StoryboardAssetEntry = {
   name: string;
   type: string;
   file: string | null;
+  // ACT: 一个主体可能对应多张素材图（如角色四视图 + 定妆照），看板按主体分支逐张展示。
+  files: string[];
   refs: { segment: string; number: string; no: string }[];
   note: string;
   source: "storyboard" | "manifest";
@@ -477,10 +479,11 @@ export async function scanStoryboardAssets(root: string): Promise<StoryboardAsse
       // ACT: 只有 资产/ 中真实存在的图片才算资产条目；关键帧预览不进资产看板。
       if (!shot.asset || !shot.image) continue;
       const key = shot.asset.toLowerCase();
-      const entry = entries.get(key) ?? { id: shot.asset, name: "", type: "", file: null, refs: [], note: "", source: "storyboard" as const };
+      const entry = entries.get(key) ?? { id: shot.asset, name: "", type: "", file: null, files: [], refs: [], note: "", source: "storyboard" as const };
       const relative = shot.image.path.startsWith(`${assetDirectory}/`) ? shot.image.path.slice(assetDirectory.length + 1) : null;
       if (relative) {
         entry.file = relative;
+        if (!entry.files.includes(relative)) entry.files.push(relative);
         referenced.add(relative);
       }
       entry.refs.push({ segment: segment.id, number: segment.number, no: shot.no });
@@ -500,16 +503,19 @@ export async function scanStoryboardAssets(root: string): Promise<StoryboardAsse
       entry.name ||= readText(item.name);
       entry.type ||= readText(item.type);
       entry.note ||= readText(item.note);
+      for (const file of existing) if (!entry.files.includes(file)) entry.files.push(file);
       entry.file ??= existing[0] ?? null;
       continue;
     }
     const baseFile = files.find(file => basename(file, extname(file)).toLowerCase() === key);
     if (baseFile) referenced.add(baseFile);
+    const own = [...new Set([...existing, ...(baseFile ? [baseFile] : [])])];
     entries.set(key, {
       id,
       name: readText(item.name),
       type: readText(item.type),
-      file: existing[0] ?? baseFile ?? null,
+      file: own[0] ?? null,
+      files: own,
       refs: manifestRefs(item.refs),
       note: readText(item.note),
       source: "manifest",
@@ -527,6 +533,48 @@ type PendingFile = { size: number; mtime: number };
 const watched = new Map<string, Map<string, PendingFile>>();
 let watching = false;
 
+// ACT: 资产目录变化经 SSE 推给页面；轮询留在服务端，Windows 与网络盘都可靠。
+type AssetWatcher = { listeners: Set<() => void>; signature: string | null };
+const assetWatchers = new Map<string, AssetWatcher>();
+
+export function onStoryboardAssetsChange(root: string, listener: () => void) {
+  const watcher = assetWatchers.get(root) ?? { listeners: new Set<() => void>(), signature: null };
+  watcher.listeners.add(listener);
+  assetWatchers.set(root, watcher);
+  return () => {
+    watcher.listeners.delete(listener);
+    if (!watcher.listeners.size) assetWatchers.delete(root);
+  };
+}
+
+// ACT: 文件名 + 大小 + 修改时间足以识别新增、删除与改图；待归位里的视频也算变化来源。
+async function assetSignature(root: string) {
+  const assetRoot = await resolveWorkspacePath(root, assetDirectory, true);
+  const files = await listFilesDeep(assetRoot.path);
+  const parts: string[] = [];
+  for (const file of files) {
+    const info = await lstat(join(assetRoot.path, file)).catch(() => null);
+    parts.push(info?.isFile() ? `${file}:${info.size}:${Math.round(info.mtimeMs)}` : `${file}:0`);
+  }
+  const pendingRoot = await resolveWorkspacePath(root, pendingDirectory, true);
+  const pending = (await listFiles(pendingRoot.path)).sort();
+  return `${parts.join("|")}##${pending.join("|")}`;
+}
+
+async function pollAssets(root: string) {
+  const watcher = assetWatchers.get(root);
+  if (!watcher) return;
+  const signature = await assetSignature(root);
+  if (watcher.signature === signature) return;
+  const baseline = watcher.signature === null;
+  watcher.signature = signature;
+  // ACT: 首轮只记录基线，避免页面刚连上就误报一次变更。
+  if (baseline) return;
+  for (const listener of watcher.listeners) {
+    try { listener(); } catch (error) { console.warn("资产变更通知失败：", error); }
+  }
+}
+
 export function watchStoryboard(root: string) {
   if (watched.has(root)) return;
   watched.set(root, new Map());
@@ -535,7 +583,10 @@ export function watchStoryboard(root: string) {
   watching = true;
   // ACT: 2 秒轮询代替文件监听，Windows 与网络盘均可靠；工作区数量很少时开销可忽略。
   setInterval(() => {
-    for (const directory of watched.keys()) settlePending(directory).catch(error => console.warn("分镜视频归位失败：", error));
+    for (const directory of watched.keys()) {
+      settlePending(directory).catch(error => console.warn("分镜视频归位失败：", error));
+      void pollAssets(directory).catch(error => console.warn("资产目录监听失败：", error));
+    }
   }, 2000).unref();
 }
 
