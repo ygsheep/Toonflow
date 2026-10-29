@@ -128,5 +128,8 @@ export async function createApp({
 
   const { initializeMobileLinkRuntime } = await import("@/utils/mobileLink");
   initializeMobileLinkRuntime(app);
+  // ACT: 配置了本地 ComfyUI 时随软件启动异步拉起，不阻塞服务监听。
+  const { autoStart: autoStartComfyui } = await import("@/utils/comfyuiLocal");
+  autoStartComfyui();
   return app;
 }

@@ -9,10 +9,11 @@ type PendingCall = { cwd: string; finish(response: CanvasResult): void };
 // ACT: 回传仅在当前 Server 进程存活期间有效；多进程部署需共享请求通道。
 const pendingCalls = new Map<string, PendingCall>();
 
-export function createCanvasContext(cwd: string, canvas: CanvasInfo, send: (event: Extract<AgentEvent, { type: "canvasCall" }>) => void) {
+export function createCanvasContext(cwd: string, canvas: CanvasInfo, send: (event: Extract<AgentEvent, { type: "canvasCall" }>) => void, onUnresponsive?: () => void) {
   const activeCalls = new Set<string>();
   let queue = Promise.resolve();
   let disposed = false;
+  let consecutiveTimeouts = 0;
   const context: CanvasContext = {
     ...canvas,
     async call(request, signal) {
@@ -30,12 +31,18 @@ export function createCanvasContext(cwd: string, canvas: CanvasInfo, send: (even
             activeCalls.delete(callId);
             clearTimeout(timer);
             signal?.removeEventListener("abort", abort);
+            if (error === undefined) consecutiveTimeouts = 0;
             if (error !== undefined) reject(new Error(error || "画布调用失败"));
             else resolve(result);
           };
           const abort = () => finish({ error: "画布调用已取消" });
           // ACT: 音频按实际时长播放，转写由浏览器检测停滞与收尾超时，仍接受本轮取消。
-          const timer = request.name === "transcribeAudio" ? undefined : setTimeout(() => finish({ error: "画布调用超时，请确认画布仍然打开" }), 120000);
+          const timer = request.name === "transcribeAudio" ? undefined : setTimeout(() => {
+            consecutiveTimeouts += 1;
+            finish({ error: "画布调用超时，请确认画布仍然打开" });
+            // ACT: 连续两次超时说明画布侧已接收不到事件（切走对话或页面失联），结束本轮，避免对话长期停在运行中。
+            if (consecutiveTimeouts >= 2) onUnresponsive?.();
+          }, 120000);
           pendingCalls.set(callId, { cwd, finish });
           activeCalls.add(callId);
           signal?.addEventListener("abort", abort, { once: true });

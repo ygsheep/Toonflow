@@ -27,7 +27,7 @@ export async function runDelegatedAgent(options: {
   };
   const controller = new AbortController();
   const childSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
-  const bridge = canvas ? createCanvasContext(cwd, canvas, send) : undefined;
+  const bridge = canvas ? createCanvasContext(cwd, canvas, send, () => controller.abort()) : undefined;
   const questions = createQuestionContext(cwd, send, () => controller.abort());
   const result: SubAgentResult = { name, status: "running", result: "准备执行" };
   try {

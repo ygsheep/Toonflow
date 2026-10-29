@@ -52,6 +52,7 @@ import {
   IconUserCircle,
   IconSubtitlesAi,
   IconDevices,
+  IconTerminal2,
 } from "@tabler/icons-vue";
 
 const settingsPanels = [
@@ -66,6 +67,7 @@ const settingsPanels = [
     component: defineAsyncComponent(() => import("./panels/languageModel/index.vue")),
   },
   { id: "mediaModel", label: "媒体模型", icon: IconPhotoVideo, component: defineAsyncComponent(() => import("./panels/mediaModel/index.vue")) },
+  { id: "comfyui", label: "本地 ComfyUI", icon: IconTerminal2, component: defineAsyncComponent(() => import("./panels/comfyui/index.vue")) },
   {
     id: "pluginMarket",
     label: "插件市场",

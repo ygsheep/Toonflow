@@ -45,8 +45,8 @@
       <skillMenu ref="skillMenuRef" :directory="directory" :active="active" :disabled="locked || !directory" :query="skillQuery" :editor="senderElement" @select="selectSkill" @dismiss="skillQuery = undefined" />
       <el-button class="voiceButton" :class="{ voiceActive }" text circle :disabled="!voiceSupported || (!voiceActive && locked)" :aria-label="voiceButtonLabel" :aria-pressed="voiceActive" :title="voiceButtonLabel" @click="voiceActive ? cancelVoiceInput() : startVoiceInput()"><icon-microphone :size="18" /></el-button>
       <contextUsagePopover v-model:visible="contextMenuVisible" :usage="contextUsage" :stats="stats" :contextWindow="contextWindow" :disabled="voiceActive" />
-      <el-button class="sendButton" type="primary" circle :disabled="!busy && locked" :aria-label="busy ? '停止生成' : editingId ? '重发消息' : '发送消息'" :title="busy ? '停止生成' : editingId ? '重发消息' : '发送消息'" @click="busy ? emit('stop') : emit('submit')">
-        <icon-player-stop-filled v-if="busy" :size="14" />
+      <el-button class="sendButton" type="primary" circle :disabled="!busy && locked" :aria-label="busy || remoteRunning ? '停止生成' : editingId ? '重发消息' : '发送消息'" :title="busy || remoteRunning ? '停止生成' : editingId ? '重发消息' : '发送消息'" @click="busy || remoteRunning ? emit('stop') : requestSubmit()">
+        <icon-player-stop-filled v-if="busy || remoteRunning" :size="14" />
         <icon-arrow-up v-else :size="16" />
       </el-button>
     </div>
@@ -105,6 +105,12 @@ const senderMaxHeight = ref(Math.max(44, window.innerHeight / 2));
 let senderResize: { pointerId: number; y: number; height: number } | undefined;
 const contextMenuVisible = ref(false);
 const locked = computed(() => props.disabled || props.busy || props.deletingId !== undefined || restoringAttachment.value || voiceActive.value);
+// ACT: 远端回复仍在运行时主服务会以 409 拒绝新请求，这里直接拦截并提示，避免发出无效请求。
+function requestSubmit() {
+  if (props.busy) return;
+  if (props.remoteRunning) return ElMessage.warning("当前回复仍在运行，请等待完成");
+  emit("submit");
+}
 const { voiceSupported, voiceState, voiceText, voiceActive, voiceButtonLabel, voiceLevel, armVoiceInput, startVoiceInput, clearVoicePress, cancelVoiceInput } = useVoiceInput({
   getSender: () => sender,
   active: () => props.active,
@@ -387,7 +393,7 @@ watch(senderElement, (element, _previous, onCleanup) => {
   });
   sender = instance;
   if (!props.active || locked.value) instance.disable();
-  instance.bus.on("agentConversation", xSender.EventSet.EVENT_COMMON_SEND, () => emit("submit"));
+  instance.bus.on("agentConversation", xSender.EventSet.EVENT_COMMON_SEND, () => requestSubmit());
   instance.bus.on("agentConversation", xSender.EventSet.EVENT_COMMON_CHANGE, () => {
     skillQuery.value = /^\/([^\s/]*)$/.exec(instance.getText())?.[1];
     const targets: typeof draftMentionTargets.value = [];

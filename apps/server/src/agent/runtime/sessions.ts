@@ -72,6 +72,14 @@ export function registerAgentSession(path: string, active: ActiveAgentSession) {
   return () => { if (activeSessions.get(key) === active) activeSessions.delete(key); };
 }
 
+/** 主动停止仍在运行的会话；不等收尾，避免接口被长任务挂住。 */
+export function stopActiveAgentSession(path: string) {
+  const active = getActiveAgentSession(path);
+  if (!active) return false;
+  void active.abort();
+  return true;
+}
+
 export function getSubAgentInfo(history: SessionManager) {
   return history.getEntries().find(entry => entry.type === "custom" && entry.customType === "toonflowSubAgentInfo") as
     (SessionEntry & { data: AgentSubAgent }) | undefined;

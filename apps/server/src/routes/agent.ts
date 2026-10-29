@@ -40,8 +40,9 @@ export default Router().post("/", validateFields(inputSchema.shape), async (req,
     u.agent.trackAgentEvent(cwd, options.sessionFile, event);
     if (!res.destroyed) res.write(`${JSON.stringify(event)}\n`);
   };
-  const bridge = canvas ? u.canvas.createCanvasContext(cwd, canvas as CanvasInfo, send) : undefined;
   const controller = new AbortController();
+  // ACT: 画布连续超时说明前端已无法响应，直接中止本轮，避免对话一直停在运行中。
+  const bridge = canvas ? u.canvas.createCanvasContext(cwd, canvas as CanvasInfo, send, () => controller.abort()) : undefined;
   const questions = u.question.createQuestionContext(cwd, send, () => controller.abort());
   const heartbeat = setInterval(() => {
     if (!res.destroyed && !res.writableEnded && !res.writableNeedDrain) res.write("\n");

@@ -155,8 +155,22 @@ async function deleteMessage(item: AgentMessage) {
   }
 }
 
-function stopMessage() {
+async function stopMessage() {
   controller?.abort();
+  // ACT: 远端运行时前端没有本次请求的控制器，改为通知服务端中止该会话。
+  if (busy.value || !remoteRunning.value) return;
+  if (!directory || !props.sessionFile) return ElMessage.warning("请重新打开对话后再停止");
+  try {
+    const { data } = await axios.post<{ data: boolean }>("/api/agent/stop", { directory, sessionFile: props.sessionFile }, {
+      headers: { "Accept-Language": locale.value, "x-toonflow-workspace": "1" },
+    });
+    remoteRunning.value = false;
+    if (data.data) ElMessage.success("已停止");
+    else ElMessage.warning("当前没有正在运行的回复");
+  } catch (error) {
+    const message = axios.isAxiosError<{ message?: string }>(error) ? error.response?.data?.message : undefined;
+    ElMessage.error(message || (error instanceof Error ? error.message : "停止失败"));
+  }
 }
 
 async function uploadAttachments(attachments: AgentAttachment[], directory: string, signal: AbortSignal) {
@@ -221,6 +235,8 @@ async function sendMessage(source?: AgentMessage) {
   if (source && (source.role !== "user" || resendIndex < 0)) return;
   const resendFrom = source ? source.entryId ?? messages.value.slice(resendIndex + 1).find(item => item.role === "user" && item.entryId)?.entryId : undefined;
   if (locked.value || !instance || (!prompt && !attachments.length)) return;
+  // ACT: 服务端同一主会话运行中会拒绝新请求，这里兜底拦截自动发送等绕过输入框的路径。
+  if (remoteRunning.value) return ElMessage.warning("当前回复仍在运行，请等待完成");
   const model = selectedModelChoice.value;
   if (!directory) return ElMessage.warning("请先打开项目");
   if (!model) return ElMessage.warning("请先选择模型");

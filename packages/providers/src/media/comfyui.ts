@@ -32,7 +32,7 @@ const rules = [
   },
 ];
 
-const version = "1.3.0";
+const version = "1.4.0";
 
 /** 图片生成的总等待上限（毫秒）。 */
 const imageTimeout = 20 * 60 * 1000;
@@ -147,7 +147,8 @@ const editImageWorkflow: ComfyWorkflow = {
     inputs: {
       prompt: "Replace costumes for the character",
       negative_prompt: "",
-      resolution: 0,
+      // ACT: 参考图需缩到模型训练分辨率附近，0 会按原图尺寸编码，参考 latent 过长导致编辑指令几乎不生效、输出接近复制原图。
+      resolution: 1024,
       clip: ["459:453", 0],
       "images.image_1": ["470", 0],
       "images.image_2": ["475", 0],
@@ -155,6 +156,38 @@ const editImageWorkflow: ComfyWorkflow = {
     },
     class_type: "TextEncodeQwenImage21",
   },
+};
+
+/**
+ * Qwen Image Edit 2511 工作流（外部导入）。
+ * ACT: 面向抠图与人物/场景编辑；默认 40 步 + CFG 4，把 170:168 开关改为 true 可启用 4 步 Lightning LoRA。
+ */
+const editImage2511Workflow: ComfyWorkflow = {
+  "9": { inputs: { filename_prefix: "Toonflow", images: ["170:158", 0] }, class_type: "SaveImage" },
+  "41": { inputs: { image: "" }, class_type: "LoadImage" },
+  "83": { inputs: { image: "" }, class_type: "LoadImage" },
+  "170:145": { inputs: { shift: 3.1, sampling: "flow", model: ["170:161", 0] }, class_type: "ModelSamplingAuraFlow" },
+  "170:146": { inputs: { vae_name: "qwen_image_vae.safetensors" }, class_type: "VAELoader" },
+  "170:147": { inputs: { reference_latents_method: "index_timestep_zero", conditioning: ["170:149", 0] }, class_type: "FluxKontextMultiReferenceLatentMethod" },
+  "170:148": { inputs: { reference_latents_method: "index_timestep_zero", conditioning: ["170:151", 0] }, class_type: "FluxKontextMultiReferenceLatentMethod" },
+  "170:149": { inputs: { prompt: "", clip: ["170:162", 0], vae: ["170:146", 0], image1: ["170:160", 0], image2: ["83", 0] }, class_type: "TextEncodeQwenImageEditPlus" },
+  "170:151": { inputs: { prompt: "Change the furniture leather difference in image 1 to the fur material in image 2.", clip: ["170:162", 0], vae: ["170:146", 0], image1: ["170:160", 0], image2: ["83", 0] }, class_type: "TextEncodeQwenImageEditPlus" },
+  "170:152": { inputs: { strength: 1, pre_cfg: false, model: ["170:145", 0] }, class_type: "CFGNorm" },
+  "170:153": { inputs: { lora_name: "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors", strength_model: 1, model: ["170:152", 0] }, class_type: "LoraLoaderModelOnly" },
+  "170:154": { inputs: { value: 4 }, class_type: "PrimitiveFloat" },
+  "170:155": { inputs: { value: 1 }, class_type: "PrimitiveFloat" },
+  "170:156": { inputs: { pixels: ["170:160", 0], vae: ["170:146", 0] }, class_type: "VAEEncode" },
+  "170:158": { inputs: { samples: ["170:169", 0], vae: ["170:146", 0] }, class_type: "VAEDecode" },
+  "170:160": { inputs: { image: ["41", 0] }, class_type: "FluxKontextImageScale" },
+  "170:161": { inputs: { unet_name: "qwen_image_edit_2511_fp8mixed.safetensors", weight_dtype: "default" }, class_type: "UNETLoader" },
+  "170:162": { inputs: { clip_name: "qwen_2.5_vl_7b_fp8_scaled.safetensors", type: "qwen_image", device: "default" }, class_type: "CLIPLoader" },
+  "170:163": { inputs: { switch: ["170:168", 0], on_false: ["170:152", 0], on_true: ["170:153", 0] }, class_type: "ComfySwitchNode" },
+  "170:164": { inputs: { switch: ["170:168", 0], on_false: ["170:154", 0], on_true: ["170:155", 0] }, class_type: "ComfySwitchNode" },
+  "170:165": { inputs: { value: 4 }, class_type: "PrimitiveInt" },
+  "170:166": { inputs: { value: 40 }, class_type: "PrimitiveInt" },
+  "170:167": { inputs: { switch: ["170:168", 0], on_false: ["170:166", 0], on_true: ["170:165", 0] }, class_type: "ComfySwitchNode" },
+  "170:168": { inputs: { value: false }, class_type: "PrimitiveBoolean" },
+  "170:169": { inputs: { seed: 0, steps: ["170:167", 0], cfg: ["170:164", 0], sampler_name: "euler", scheduler: "simple", denoise: 1, model: ["170:163", 0], positive: ["170:148", 0], negative: ["170:147", 0], latent_image: ["170:156", 0] }, class_type: "KSampler" },
 };
 
 /**
@@ -430,12 +463,32 @@ function createEditImageWorkflow(request: ImageRequest, imageNames: string[]) {
   // ACT: 未填写提示词时沿用工作流内置提示词，避免覆盖预制内容。
   if (request.prompt.trim()) workflow["459:474"].inputs.prompt = request.prompt;
   workflow["459:458"].inputs.seed = Math.floor(Math.random() * 1e15);
-  workflow["470"].inputs.image = imageNames[0];
+  // ACT: 参考图数量不固定，按张数动态生成 LoadImage 并挂到 images.image_N（节点上限 16 个槽位）。
+  delete workflow["470"];
+  delete workflow["475"];
+  const encode = workflow["459:474"].inputs;
+  for (const key of Object.keys(encode)) if (key.startsWith("images.")) delete encode[key];
+  imageNames.forEach((name, index) => {
+    const nodeId = String(470 + index);
+    workflow[nodeId] = { class_type: "LoadImage", inputs: { image: name } };
+    encode[`images.image_${index + 1}`] = [nodeId, 0];
+  });
+  return workflow;
+}
+
+function createEditImage2511Workflow(request: ImageRequest, imageNames: string[]) {
+  const workflow = JSON.parse(JSON.stringify(editImage2511Workflow)) as ComfyWorkflow;
+  // ACT: 未填写提示词时沿用工作流内置提示词，避免覆盖预制内容。
+  if (request.prompt.trim()) workflow["170:151"].inputs.prompt = request.prompt;
+  workflow["170:169"].inputs.seed = Math.floor(Math.random() * 1e15);
+  workflow["41"].inputs.image = imageNames[0];
   if (imageNames[1]) {
-    workflow["475"].inputs.image = imageNames[1];
+    workflow["83"].inputs.image = imageNames[1];
   } else {
-    delete workflow["475"];
-    delete workflow["459:474"].inputs["images.image_2"];
+    // ACT: TextEncodeQwenImageEditPlus 的 image2 为可选输入，只有 1 张参考图时移除该节点与连线。
+    delete workflow["83"];
+    delete workflow["170:149"].inputs.image2;
+    delete workflow["170:151"].inputs.image2;
   }
   return workflow;
 }
@@ -510,9 +563,14 @@ async function submitWorkflow(context: Context, baseUrl: string, workflow: Comfy
 
 async function waitForOutputs(context: Context, baseUrl: string, promptId: string, signal: AbortSignal) {
   while (true) {
-    const response = await context.tool.fetch(`${baseUrl}/history/${encodeURIComponent(promptId)}`, { signal });
-    if (!response.ok) throw new Error(`查询 ComfyUI 任务失败：HTTP ${response.status}`);
-    const entry = ((await response.json()) as Record<string, HistoryEntry>)[promptId];
+    let entry: HistoryEntry | undefined;
+    try {
+      const response = await context.tool.fetch(`${baseUrl}/history/${encodeURIComponent(promptId)}`, { signal });
+      if (response.ok) entry = ((await response.json()) as Record<string, HistoryEntry>)[promptId];
+    } catch (error) {
+      // ACT: ComfyUI 执行任务时会短暂不响应 HTTP 请求，单次查询失败不能判定生成失败，继续轮询到总超时。
+      if (signal.aborted) throw error;
+    }
     if (entry) {
       if (entry.status?.status_str === "error") {
         throw new Error(`ComfyUI 生成失败：${context.tool.errorMessage(entry.status.messages) || "请查看 ComfyUI 控制台日志"}`);
@@ -549,9 +607,11 @@ async function uploadFile(context: Context, baseUrl: string, media: MediaInput, 
   const bytes = media.type === "base64" ? Buffer.from(media.data.replace(/^data:[^;]+;base64,/, ""), "base64") : media.data;
   const extension = fileExtensions[media.mimeType] ?? (media.mimeType.startsWith("audio/") ? "wav" : "png");
   const boundary = `----toonflow${Math.random().toString(16).slice(2)}`;
+  // ACT: 文件名按任务唯一，避免多个并发任务上传时互相覆盖参考素材导致串图。
+  const fileName = `${name}-${Math.random().toString(16).slice(2, 10)}`;
   const encoder = new TextEncoder();
   const head = encoder.encode(
-    `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="${name}.${extension}"\r\nContent-Type: ${media.mimeType}\r\n\r\n`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="${fileName}.${extension}"\r\nContent-Type: ${media.mimeType}\r\n\r\n`,
   );
   const tail = encoder.encode(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="overwrite"\r\n\r\ntrue\r\n--${boundary}--\r\n`);
   const body = new Uint8Array(head.length + bytes.length + tail.length);
@@ -586,6 +646,9 @@ export default {
 - 视频模型：DasiwaMinimaxH3_dasiwaHybridV4_int8、qwen3vl_32b_minimax_h3_nvfp4_awq、minimax_h3_video_vae_fp16、minimax_h3_audio_vae_fp32、lora minimaxh3/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16
 - 视频需 1-9 张参考图、最多 3 段参考音频，输出 24fps H.264 MP4（含音频）。
 - 图片编辑需 1-2 张参考图，输出尺寸跟随参考图，忽略分辨率与比例设置。
+- 图片编辑（2511）需 1-2 张参考图，适合抠图与人物/场景编辑；默认 40 步 + CFG 4。
+- 图片编辑（2511）所需节点：TextEncodeQwenImageEditPlus、FluxKontextImageScale、FluxKontextMultiReferenceLatentMethod、ModelSamplingAuraFlow、CFGNorm、ComfySwitchNode。
+- 图片编辑（2511）所需模型：qwen_image_edit_2511_fp8mixed、qwen_2.5_vl_7b_fp8_scaled、qwen_image_vae、lora Qwen-Image-Edit-2511-Lightning-4steps-V1.0。
 - 角色四视图需 1 张参考图，输出固定 1536x1024，忽略分辨率与比例设置。
 - 角色四视图所需节点：Krea2EditModelPatch、Krea2EditGroundedEncode、ImageResizeKJv2（ComfyUI-KJNodes）、EmptySD3LatentImage、LoraLoaderModelOnly。
 - 角色四视图所需模型：krea2_turbo_int8_convrot、qwen3vl_4b_fp8_scaled、qwen_image_vae、lora krea2_4panel。`,
@@ -605,6 +668,13 @@ export default {
       type: "image",
       mode: ["singleImage", "multiReference"],
       defaultPrompt: "Replace costumes for the character",
+    },
+    {
+      id: "qwen-image-edit-2511",
+      label: "Qwen Image Edit 2511（抠图 / 人物场景）",
+      type: "image",
+      mode: ["singleImage", "multiReference"],
+      defaultPrompt: "Remove the background and keep the main subject cleanly cut out",
     },
     {
       id: "krea2-character-sheet",
@@ -630,12 +700,24 @@ export default {
     if (request.model === "qwen-image-2.1-edit") {
       const images = request.images ?? [];
       if (!images.length) throw new Error("请至少添加 1 张参考图");
-      if (images.length > 2) throw new Error("图片编辑最多支持 2 张参考图");
+      if (images.length > 8) throw new Error("图片编辑最多支持 8 张参考图");
       const imageNames: string[] = [];
       for (let index = 0; index < images.length; index += 1) {
         imageNames.push(await uploadFile(this, baseUrl, images[index], `toonflow-edit-${index}`, signal));
       }
       const promptId = await submitWorkflow(this, baseUrl, createEditImageWorkflow(request, imageNames), signal);
+      const files = await waitForOutputs(this, baseUrl, promptId, signal);
+      return files.map(file => ({ mediaType: "image" as const, type: "url" as const, url: viewUrl(baseUrl, file), mimeType: "image/png" }));
+    }
+    if (request.model === "qwen-image-edit-2511") {
+      const images = request.images ?? [];
+      if (!images.length) throw new Error("请至少添加 1 张参考图");
+      if (images.length > 2) throw new Error("Qwen Image Edit 2511 最多支持 2 张参考图");
+      const imageNames: string[] = [];
+      for (let index = 0; index < images.length; index += 1) {
+        imageNames.push(await uploadFile(this, baseUrl, images[index], `toonflow-edit-2511-${index}`, signal));
+      }
+      const promptId = await submitWorkflow(this, baseUrl, createEditImage2511Workflow(request, imageNames), signal);
       const files = await waitForOutputs(this, baseUrl, promptId, signal);
       return files.map(file => ({ mediaType: "image" as const, type: "url" as const, url: viewUrl(baseUrl, file), mimeType: "image/png" }));
     }

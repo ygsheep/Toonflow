@@ -8,6 +8,7 @@ import * as mediaTasks from "@/utils/media/tasks";
 import * as mediaProvider from "@/utils/media/provider";
 import * as mediaBilling from "@/utils/media/billing";
 import * as ffmpeg from "@/utils/ffmpeg";
+import * as comfyuiLocal from "@/utils/comfyuiLocal";
 import * as pluginInstall from "@/utils/plugins/install";
 import conf, { cleanNodeMenuSettings, removeLegacySettings } from "@/utils/conf";
 import * as ai from "@/utils/ai";
@@ -44,6 +45,7 @@ export default {
   mediaProvider,
   mediaBilling,
   ffmpeg,
+  comfyuiLocal,
   pluginInstall,
   conf,
   cleanNodeMenuSettings,
