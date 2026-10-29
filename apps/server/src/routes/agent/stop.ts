@@ -1,15 +1,17 @@
 import { Router } from "express";
 import { z } from "zod";
-import u from "@/utils";
 import { validateFields } from "@/lib/middleware";
 import { success } from "@/lib/responseFormat";
+import u from "@/utils";
 
-export default Router().post("/", validateFields({
+const inputSchema = z.object({
   directory: z.string().min(1).max(4096),
-  sessionFile: z.string().regex(/^[\w-]+\.jsonl$/),
-}), async (req, res) => {
-  const { directory, sessionFile } = req.body;
+  runIds: z.array(z.uuid()).max(1000),
+});
+
+export default Router().post("/", validateFields(inputSchema.shape), async (req, res) => {
+  const { directory, runIds } = req.body as z.infer<typeof inputSchema>;
   const cwd = await u.workspace.resolveWorkspace(req, directory);
-  const { path } = await u.workspaceFile.resolveWorkspacePath(cwd, `.agent/sessions/${sessionFile}`);
-  res.json(success(u.agent.stopActiveAgentSession(path)));
+  await u.agent.stopAgentRuns(cwd, runIds);
+  res.json(success());
 });
